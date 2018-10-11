@@ -1,51 +1,31 @@
-from urllib.parse import urlparse
-
 from aiocache import cached, caches
 from sanic import Sanic
 from sanic_compress import Compress
 from sanic_jinja2 import SanicJinja2
 
 from victims.data import Data
-from victims.settings import (
-    CACHE_DATA_FOR,
-    REDIS_DB,
-    REDIS_URL,
-    REFRESH_CACHE_ON_LOAD,
-    STATIC_DIR,
-    TITLE,
-)
+from victims.settings import CACHE, STATIC_DIR, TITLE
 
 
 app = Sanic("vitimas_da_intolerancia")
 app.static("/static", str(STATIC_DIR))
+jinja = SanicJinja2(app, pkg_name="victims")
+caches.set_config(CACHE)
 Compress(app)
 
-jinja = SanicJinja2(app, pkg_name="victims")
-app_data = Data(refresh_cache=REFRESH_CACHE_ON_LOAD)
-redis = urlparse(REDIS_URL)
-caches.set_config(
-    {
-        "default": {
-            "cache": "aiocache.RedisCache",
-            "namespace": "sanic-cache",
-            "timeout": CACHE_DATA_FOR,
-            "endpoint": redis.hostname,
-            "port": redis.port,
-            "db": REDIS_DB,
-            "serializer": {"class": "aiocache.serializers.PickleSerializer"},
-        }
-    }
-)
+
+@cached(key="cases")
+async def get_cases():
+    data = Data()
+    return await data.cases()
 
 
-@cached(key="home")
 @app.route("/")
 @jinja.template("home.html")
 async def home(request):
-    return {"cases": app_data.cases, "title": TITLE, "url_path": "/"}
+    return {"cases": await get_cases(), "title": TITLE, "url_path": "/"}
 
 
-@cached(key="about")
 @app.route("/about.html")
 @jinja.template("about.html")
 async def about(request):
